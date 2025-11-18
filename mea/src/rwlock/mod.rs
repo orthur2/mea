@@ -69,7 +69,7 @@
 use std::cell::UnsafeCell;
 use std::fmt;
 
-use crate::internal::Semaphore;
+use crate::internal;
 
 mod mapped_read_guard;
 pub use mapped_read_guard::MappedRwLockReadGuard;
@@ -98,7 +98,7 @@ pub struct RwLock<T: ?Sized> {
     /// Maximum number of concurrent readers.
     max_readers: usize,
     /// Semaphore to coordinate read and write access to T
-    s: Semaphore,
+    s: internal::Semaphore,
     /// The inner data.
     c: UnsafeCell<T>,
 }
@@ -158,7 +158,7 @@ impl<T> RwLock<T> {
     /// let rwlock = RwLock::with_max_readers(5, 1024);
     /// ```
     pub fn with_max_readers(t: T, max_readers: usize) -> RwLock<T> {
-        let s = Semaphore::new(max_readers);
+        let s = internal::Semaphore::new(max_readers);
         let c = UnsafeCell::new(t);
         RwLock { max_readers, c, s }
     }

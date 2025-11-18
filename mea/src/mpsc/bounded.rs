@@ -27,8 +27,8 @@ use std::task::Poll;
 use std::task::Waker;
 
 use crate::atomicbox::AtomicOptionBox;
+use crate::internal;
 use crate::internal::Acquire;
-use crate::internal::Semaphore;
 use crate::mpsc::error::TrySendError;
 use crate::mpsc::SendError;
 use crate::mpsc::TryRecvError;
@@ -44,7 +44,7 @@ pub fn bounded<T>(buffer: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
     assert!(buffer > 0, "mpsc bounded channel requires buffer > 0");
     let state = Arc::new(BoundedState {
         senders: AtomicUsize::new(1),
-        tx_permits: Semaphore::new(0),
+        tx_permits: internal::Semaphore::new(0),
         rx_task: AtomicOptionBox::none(),
     });
     let (sender, receiver) = std::sync::mpsc::sync_channel(buffer);
@@ -61,7 +61,7 @@ pub fn bounded<T>(buffer: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
 
 struct BoundedState {
     senders: AtomicUsize,
-    tx_permits: Semaphore,
+    tx_permits: internal::Semaphore,
     rx_task: AtomicOptionBox<Waker>,
 }
 

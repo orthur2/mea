@@ -70,6 +70,7 @@ pub mod condvar;
 pub mod latch;
 pub mod mpsc;
 pub mod mutex;
+pub mod once;
 pub mod oneshot;
 pub mod rwlock;
 pub mod semaphore;
