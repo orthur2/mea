@@ -15,8 +15,12 @@
 use std::cell::UnsafeCell;
 use std::future::Future;
 use std::mem::MaybeUninit;
+use std::ptr;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+
+#[cfg(test)]
+mod tests;
 
 use crate::internal;
 
@@ -27,12 +31,18 @@ pub struct OnceCell<T> {
     value: UnsafeCell<MaybeUninit<T>>,
 }
 
+// Access to OnceCell's value is guarded by the semaphore permit and the
+// `set` flag. We can move values across threads via `set`, so T must be Send.
+// Once initialized we hand out shared references, so T also needs Sync.
+unsafe impl<T: Send> Send for OnceCell<T> {}
+unsafe impl<T: Send + Sync> Sync for OnceCell<T> {}
+
 impl<T> OnceCell<T> {
     /// Creates a new empty `OnceCell` instance.
     pub fn new() -> Self {
         OnceCell {
             set: AtomicBool::new(false),
-            sem: internal::Semaphore::new(0),
+            sem: internal::Semaphore::new(1),
             value: UnsafeCell::new(MaybeUninit::uninit()),
         }
     }
@@ -75,16 +85,15 @@ impl<T> OnceCell<T> {
             if self.initialized() {
                 // Another task initialized the cell while we were waiting for
                 // the permit.
-                guard.forget();
                 // SAFETY: The OnceCell has been fully initialized.
                 return unsafe { self.get_unchecked() };
             }
 
             // We are now the only task that can initialize the cell.
             let value = f().await;
-            guard.forget();
-
-            self.set_value(value)
+            let reference = self.set_value(value);
+            drop(guard);
+            reference
         }
     }
 
@@ -108,16 +117,15 @@ impl<T> OnceCell<T> {
             if self.initialized() {
                 // Another task initialized the cell while we were waiting for
                 // the permit.
-                guard.forget();
                 // SAFETY: The OnceCell has been fully initialized.
                 return unsafe { Ok(self.get_unchecked()) };
             }
 
             // We are now the only task that can initialize the cell.
             let value = f().await?;
-            guard.forget();
-
-            Ok(self.set_value(value))
+            let reference = self.set_value(value);
+            drop(guard);
+            Ok(reference)
         }
     }
 
@@ -137,10 +145,24 @@ impl<T> OnceCell<T> {
         // Using release ordering so any threads that read a true from this
         // atomic is able to read the value we just stored.
         self.set.store(true, Ordering::Release);
-        self.sem.notify_all();
 
         // SAFETY: We just initialized the cell.
         unsafe { self.get_unchecked() }
+    }
+
+    fn initialized_mut(&mut self) -> bool {
+        *self.set.get_mut()
+    }
+}
+
+impl<T> Drop for OnceCell<T> {
+    fn drop(&mut self) {
+        if self.initialized_mut() {
+            unsafe {
+                let ptr = self.value.get();
+                ptr::drop_in_place((*ptr).as_mut_ptr());
+            }
+        }
     }
 }
 
@@ -149,14 +171,10 @@ struct Guard<'a> {
     permits: usize,
 }
 
-impl Guard<'_> {
-    fn forget(mut self) {
-        self.permits = 0;
-    }
-}
-
 impl<'a> Drop for Guard<'a> {
     fn drop(&mut self) {
-        self.sem.release(self.permits);
+        if self.permits != 0 {
+            self.sem.release(self.permits);
+        }
     }
 }
