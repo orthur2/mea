@@ -174,37 +174,29 @@ fn waker_vtable() -> &'static RawWakerVTable {
 }
 
 unsafe fn clone_raw(data: *const ()) -> RawWaker {
-    unsafe {
-        let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
-        handle.clone_count.fetch_add(1, Ordering::Relaxed);
-        mem::forget(handle.clone());
-        mem::forget(handle);
-        RawWaker::new(data, waker_vtable())
-    }
+    let handle: Arc<WakerHandle> = unsafe { Arc::from_raw(data as *const _) };
+    handle.clone_count.fetch_add(1, Ordering::Relaxed);
+    mem::forget(handle.clone());
+    mem::forget(handle);
+    RawWaker::new(data, waker_vtable())
 }
 
 unsafe fn wake_raw(data: *const ()) {
-    unsafe {
-        let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
-        handle.wake_count.fetch_add(1, Ordering::Relaxed);
-        handle.drop_count.fetch_add(1, Ordering::Relaxed);
-    }
+    let handle: Arc<WakerHandle> = unsafe { Arc::from_raw(data as *const _) };
+    handle.wake_count.fetch_add(1, Ordering::Relaxed);
+    handle.drop_count.fetch_add(1, Ordering::Relaxed);
 }
 
 unsafe fn wake_by_ref_raw(data: *const ()) {
-    unsafe {
-        let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
-        handle.wake_count.fetch_add(1, Ordering::Relaxed);
-        mem::forget(handle)
-    }
+    let handle: Arc<WakerHandle> = unsafe { Arc::from_raw(data as *const _) };
+    handle.wake_count.fetch_add(1, Ordering::Relaxed);
+    mem::forget(handle)
 }
 
 unsafe fn drop_raw(data: *const ()) {
-    unsafe {
-        let handle: Arc<WakerHandle> = Arc::from_raw(data as *const _);
-        handle.drop_count.fetch_add(1, Ordering::Relaxed);
-        drop(handle)
-    }
+    let handle: Arc<WakerHandle> = unsafe { Arc::from_raw(data as *const _) };
+    handle.drop_count.fetch_add(1, Ordering::Relaxed);
+    drop(handle)
 }
 
 #[test]

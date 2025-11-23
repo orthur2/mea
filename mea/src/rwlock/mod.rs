@@ -73,8 +73,6 @@ use std::num::NonZeroUsize;
 
 use crate::internal::Semaphore;
 
-const DEFAULT_MAX_READERS: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(usize::MAX >> 1) };
-
 mod mapped_read_guard;
 pub use mapped_read_guard::MappedRwLockReadGuard;
 mod mapped_write_guard;
@@ -145,7 +143,7 @@ impl<T> RwLock<T> {
     /// ```
     pub fn new(t: T) -> RwLock<T> {
         // large enough while not touch the edge
-        RwLock::with_max_readers(t, DEFAULT_MAX_READERS)
+        RwLock::with_max_readers(t, NonZeroUsize::new(usize::MAX >> 1).unwrap())
     }
 
     /// Creates a new reader-writer lock in an unlocked state, and allows a maximum of

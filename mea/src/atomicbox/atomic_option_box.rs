@@ -47,13 +47,12 @@ fn into_ptr<T>(value: Option<Box<T>>) -> *mut T {
     }
 }
 
+// SAFETY: The caller must ensure that `ptr` was obtained from `Box::into_raw` or is null.
 unsafe fn from_ptr<T>(ptr: *mut T) -> Option<Box<T>> {
-    unsafe {
-        if ptr.is_null() {
-            None
-        } else {
-            Some(Box::from_raw(ptr))
-        }
+    if ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { Box::from_raw(ptr) })
     }
 }
 

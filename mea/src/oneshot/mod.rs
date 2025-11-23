@@ -582,57 +582,55 @@ impl<T> Channel<T> {
     /// * The `waker` field must not have a waker stored when calling this method.
     /// * The `state` must not be in the RECEIVING state when calling this method.
     unsafe fn write_waker(&self, waker: Waker) -> Poll<Result<T, RecvError>> {
+        // Write the waker instance to the channel.
+        //
+        // SAFETY: we are not yet in the RECEIVING state, meaning that the sender will not
+        // try to access the waker until it sees the state set to RECEIVING below.
         unsafe {
-            // Write the waker instance to the channel.
-            //
-            // SAFETY: we are not yet in the RECEIVING state, meaning that the sender will not
-            // try to access the waker until it sees the state set to RECEIVING below.
             let slot = &mut *self.waker.get();
             slot.as_mut_ptr().write(waker);
+        }
 
-            // ORDERING: we use release ordering on success so the sender can synchronize with
-            // our write of the waker. We use relaxed ordering on failure since the sender does
-            // not need to synchronize with our write and the individual match arms handle any
-            // additional synchronization
-            match self.state.compare_exchange(
-                EMPTY,
-                RECEIVING,
-                Ordering::Release,
-                Ordering::Relaxed,
-            ) {
-                // We stored our waker, now we return and let the sender wake us up.
-                Ok(_) => Poll::Pending,
-                // The sender sent the message while we prepared to await.
-                // We take the message and mark the channel disconnected.
-                Err(MESSAGE) => {
-                    // ORDERING: Synchronize with writing message. This branch is unlikely to be
-                    // taken, so it is likely more efficient to use a fence here
-                    // instead of AcqRel ordering on the compare_exchange
-                    // operation.
-                    fence(Ordering::Acquire);
+        // ORDERING: we use release ordering on success so the sender can synchronize with
+        // our write of the waker. We use relaxed ordering on failure since the sender does
+        // not need to synchronize with our write and the individual match arms handle any
+        // additional synchronization
+        match self
+            .state
+            .compare_exchange(EMPTY, RECEIVING, Ordering::Release, Ordering::Relaxed)
+        {
+            // We stored our waker, now we return and let the sender wake us up.
+            Ok(_) => Poll::Pending,
+            // The sender sent the message while we prepared to await.
+            // We take the message and mark the channel disconnected.
+            Err(MESSAGE) => {
+                // ORDERING: Synchronize with writing message. This branch is unlikely to be
+                // taken, so it is likely more efficient to use a fence here
+                // instead of AcqRel ordering on the compare_exchange
+                // operation.
+                fence(Ordering::Acquire);
 
-                    // SAFETY: we started in the EMPTY state and the sender switched us to the
-                    // MESSAGE state. This means that it did not take the waker, so we're
-                    // responsible for dropping it.
-                    self.drop_waker();
+                // SAFETY: we started in the EMPTY state and the sender switched us to the
+                // MESSAGE state. This means that it did not take the waker, so we're
+                // responsible for dropping it.
+                unsafe { self.drop_waker() };
 
-                    // ORDERING: sender does not exist, so this update only needs to be visible to
-                    // us.
-                    self.state.store(DISCONNECTED, Ordering::Relaxed);
+                // ORDERING: sender does not exist, so this update only needs to be visible to
+                // us.
+                self.state.store(DISCONNECTED, Ordering::Relaxed);
 
-                    // SAFETY: The MESSAGE state tells us there is a correctly initialized message.
-                    Poll::Ready(Ok(self.take_message()))
-                }
-                // The sender was dropped before sending anything while we prepared to await.
-                Err(DISCONNECTED) => {
-                    // SAFETY: we started in the EMPTY state and the sender switched us to the
-                    // DISCONNECTED state. This means that it did not take the waker, so we are
-                    // responsible for dropping it.
-                    self.drop_waker();
-                    Poll::Ready(Err(RecvError(())))
-                }
-                Err(state) => unreachable!("unexpected channel state: {}", state),
+                // SAFETY: The MESSAGE state tells us there is a correctly initialized message.
+                Poll::Ready(Ok(unsafe { self.take_message() }))
             }
+            // The sender was dropped before sending anything while we prepared to await.
+            Err(DISCONNECTED) => {
+                // SAFETY: we started in the EMPTY state and the sender switched us to the
+                // DISCONNECTED state. This means that it did not take the waker, so we are
+                // responsible for dropping it.
+                unsafe { self.drop_waker() };
+                Poll::Ready(Err(RecvError(())))
+            }
+            Err(state) => unreachable!("unexpected channel state: {}", state),
         }
     }
 
