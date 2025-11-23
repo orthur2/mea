@@ -68,8 +68,11 @@
 
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::num::NonZeroUsize;
 
 use crate::internal::Semaphore;
+
+const DEFAULT_MAX_READERS: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(usize::MAX >> 1) };
 
 mod mapped_read_guard;
 pub use mapped_read_guard::MappedRwLockReadGuard;
@@ -96,7 +99,7 @@ mod test;
 /// See the [module level documentation](self) for more.
 pub struct RwLock<T: ?Sized> {
     /// Maximum number of concurrent readers.
-    max_readers: usize,
+    max_readers: NonZeroUsize,
     /// Semaphore to coordinate read and write access to T
     s: Semaphore,
     /// The inner data.
@@ -141,8 +144,7 @@ impl<T> RwLock<T> {
     /// ```
     pub fn new(t: T) -> RwLock<T> {
         // large enough while not touch the edge
-        let default_max_readers = usize::MAX >> 1;
-        RwLock::with_max_readers(t, default_max_readers)
+        RwLock::with_max_readers(t, DEFAULT_MAX_READERS)
     }
 
     /// Creates a new reader-writer lock in an unlocked state, and allows a maximum of
@@ -153,12 +155,15 @@ impl<T> RwLock<T> {
     /// # Examples
     ///
     /// ```
+    /// use std::num::NonZeroUsize;
+    ///
     /// use mea::rwlock::RwLock;
     ///
-    /// let rwlock = RwLock::with_max_readers(5, 1024);
+    /// let max_readers = NonZeroUsize::new(1024).expect("max_readers must be non-zero");
+    /// let rwlock = RwLock::with_max_readers(5, max_readers);
     /// ```
-    pub fn with_max_readers(t: T, max_readers: usize) -> RwLock<T> {
-        let s = Semaphore::new(max_readers);
+    pub fn with_max_readers(t: T, max_readers: NonZeroUsize) -> RwLock<T> {
+        let s = Semaphore::new(max_readers.get());
         let c = UnsafeCell::new(t);
         RwLock { max_readers, c, s }
     }
