@@ -373,8 +373,10 @@ async fn test_rwlock_debug_when_locked() {
 
     let shows_value = rwlock_debug_read.contains("78");
     let shows_locked = rwlock_debug_read.contains("<locked>");
-    assert!(shows_value || shows_locked,
-            "RwLock Debug with read lock should show either value or <locked>, got: {rwlock_debug_read}");
+    assert!(
+        shows_value || shows_locked,
+        "RwLock Debug with read lock should show either value or <locked>, got: {rwlock_debug_read}"
+    );
 
     drop(read_guard);
 
@@ -518,11 +520,7 @@ async fn test_owned_mapped_write_guard_filter_map_memory_leak() {
             let write_guard = rwlock.clone().write_owned().await;
             let mapped_guard1 = OwnedRwLockWriteGuard::map(write_guard, |v| v);
             let mut mapped_guard2 = OwnedMappedRwLockWriteGuard::filter_map(mapped_guard1, |v| {
-                if !v.is_empty() {
-                    Some(&mut v[0])
-                } else {
-                    None
-                }
+                if !v.is_empty() { Some(&mut v[0]) } else { None }
             })
             .expect("Should succeed");
             *mapped_guard2 = 100;
@@ -545,11 +543,7 @@ async fn test_owned_mapped_write_guard_filter_map_memory_leak() {
             let write_guard = rwlock.clone().write_owned().await;
             let mapped_guard1 = OwnedRwLockWriteGuard::map(write_guard, |v| v);
             let result = OwnedMappedRwLockWriteGuard::filter_map(mapped_guard1, |v| {
-                if !v.is_empty() {
-                    Some(&mut v[0])
-                } else {
-                    None
-                }
+                if !v.is_empty() { Some(&mut v[0]) } else { None }
             });
 
             assert!(
